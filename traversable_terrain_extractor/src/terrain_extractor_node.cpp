@@ -78,7 +78,13 @@ void TerrainExtractorNode::cloudCallback(
   }
 
   // === 1. Preprocessing ===
-  auto filtered = preprocessing_->process(input_cloud);
+  // Pass current sensor Z so PassThrough uses relative offsets
+  float sensor_z = 0.0f;
+  {
+    std::lock_guard<std::mutex> odom_lock(odom_mutex_);
+    sensor_z = robot_position_.z();
+  }
+  auto filtered = preprocessing_->process(input_cloud, sensor_z);
   if (filtered->empty()) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
                          "Cloud empty after preprocessing");
@@ -492,8 +498,8 @@ void TerrainExtractorNode::declareParameters() {
   this->declare_parameter("preprocessing.voxel_size", 0.1);
   this->declare_parameter("preprocessing.min_distance", 0.5);
   this->declare_parameter("preprocessing.max_distance", 50.0);
-  this->declare_parameter("preprocessing.min_z", -5.0);
-  this->declare_parameter("preprocessing.max_z", 10.0);
+  this->declare_parameter("preprocessing.z_offset_below", 3.0);  // meters below sensor
+  this->declare_parameter("preprocessing.z_offset_above", 1.0);  // meters above sensor
   this->declare_parameter("preprocessing.sor_mean_k", 10);
   this->declare_parameter("preprocessing.sor_std_thresh", 1.0);
   this->declare_parameter("preprocessing.enable_sor", true);
@@ -566,8 +572,8 @@ void TerrainExtractorNode::loadParameters() {
     pp.voxel_size = static_cast<float>(this->get_parameter("preprocessing.voxel_size").as_double());
     pp.min_distance = static_cast<float>(this->get_parameter("preprocessing.min_distance").as_double());
     pp.max_distance = static_cast<float>(this->get_parameter("preprocessing.max_distance").as_double());
-    pp.min_z = static_cast<float>(this->get_parameter("preprocessing.min_z").as_double());
-    pp.max_z = static_cast<float>(this->get_parameter("preprocessing.max_z").as_double());
+    pp.z_offset_below = static_cast<float>(this->get_parameter("preprocessing.z_offset_below").as_double());
+    pp.z_offset_above = static_cast<float>(this->get_parameter("preprocessing.z_offset_above").as_double());
     pp.sor_mean_k = this->get_parameter("preprocessing.sor_mean_k").as_int();
     pp.sor_std_thresh = static_cast<float>(this->get_parameter("preprocessing.sor_std_thresh").as_double());
     pp.enable_sor = this->get_parameter("preprocessing.enable_sor").as_bool();

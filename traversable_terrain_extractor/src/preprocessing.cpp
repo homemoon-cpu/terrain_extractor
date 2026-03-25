@@ -16,30 +16,36 @@ void Preprocessing::setParams(const PreprocessingParams& params) {
 }
 
 pcl::PointCloud<pcl::PointXYZI>::Ptr
-Preprocessing::process(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input) const {
+Preprocessing::process(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input,
+                        float sensor_z) const {
   if (!input || input->empty()) {
     RCLCPP_WARN(logger_, "[Preprocessing] Input cloud is null or empty");
     return std::make_shared<pcl::PointCloud<pcl::PointXYZI>>();
   }
 
-  // Print input stats (always shown, helps identify upstream issues)
+  // Compute absolute Z window from sensor position + relative offsets
+  const float z_min = sensor_z - params_.z_offset_below;
+  const float z_max = sensor_z + params_.z_offset_above;
+
   if (params_.debug_mode) {
     auto stats = computeStats(input);
     RCLCPP_INFO(logger_,
       "[Preprocessing] INPUT  : %zu pts | z=[%.2f, %.2f] mean=%.2f | "
-      "xy_dist=[%.2f, %.2f] | params z=[%.2f,%.2f] dist=[%.2f,%.2f]",
+      "xy_dist=[%.2f, %.2f] | sensor_z=%.2f → filter z=[%.2f, %.2f] dist=[%.2f, %.2f]",
       stats.count, stats.z_min, stats.z_max, stats.z_mean,
       stats.xy_dist_min, stats.xy_dist_max,
-      params_.min_z, params_.max_z,
+      sensor_z, z_min, z_max,
       params_.min_distance, params_.max_distance);
   }
 
   // ---- Step 1: PassThrough(Z) ----
-  auto after_passthrough = passthroughFilter(input);
+  auto after_passthrough = passthroughFilter(input, z_min, z_max);
   if (params_.debug_mode) {
     RCLCPP_INFO(logger_,
-      "[Preprocessing] Step1 PassThrough(z=[%.2f,%.2f]): %zu → %zu pts%s",
-      params_.min_z, params_.max_z,
+      "[Preprocessing] Step1 PassThrough(z=[%.2f, %.2f], sensor_z=%.2f "
+      "offset=[-%.2f, +%.2f]): %zu → %zu pts%s",
+      z_min, z_max, sensor_z,
+      params_.z_offset_below, params_.z_offset_above,
       input->size(), after_passthrough->size(),
       after_passthrough->empty() ? "  *** EMPTY ***" : "");
   }
@@ -47,9 +53,11 @@ Preprocessing::process(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input) const 
     auto stats = computeStats(input);
     RCLCPP_ERROR(logger_,
       "[Preprocessing] PassThrough eliminated ALL points! "
-      "Cloud z range=[%.2f, %.2f], filter z=[%.2f, %.2f]. "
-      "Fix: adjust min_z/max_z in terrain_params.yaml",
-      stats.z_min, stats.z_max, params_.min_z, params_.max_z);
+      "Cloud z=[%.2f, %.2f], sensor_z=%.2f, filter z=[%.2f, %.2f] "
+      "(offset_below=%.2f, offset_above=%.2f). "
+      "Fix: increase z_offset_below or z_offset_above in terrain_params.yaml",
+      stats.z_min, stats.z_max, sensor_z, z_min, z_max,
+      params_.z_offset_below, params_.z_offset_above);
     return after_passthrough;
   }
 
@@ -76,7 +84,7 @@ Preprocessing::process(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input) const 
   if (params_.debug_mode) {
     auto stats = computeStats(after_voxel);
     RCLCPP_INFO(logger_,
-      "[Preprocessing] Step3 DistFilter(xy=[%.2f,%.2f]m): %zu → %zu pts%s"
+      "[Preprocessing] Step3 DistFilter(xy=[%.2f, %.2f]m): %zu → %zu pts%s"
       " | cloud xy_dist=[%.2f, %.2f]",
       params_.min_distance, params_.max_distance,
       after_voxel->size(), after_dist->size(),
@@ -136,12 +144,13 @@ Preprocessing::process(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input) const 
 }
 
 pcl::PointCloud<pcl::PointXYZI>::Ptr
-Preprocessing::passthroughFilter(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input) const {
+Preprocessing::passthroughFilter(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input,
+                                  float z_min, float z_max) const {
   auto output = std::make_shared<pcl::PointCloud<pcl::PointXYZI>>();
   pcl::PassThrough<pcl::PointXYZI> pass;
   pass.setInputCloud(input);
   pass.setFilterFieldName("z");
-  pass.setFilterLimits(params_.min_z, params_.max_z);
+  pass.setFilterLimits(z_min, z_max);
   pass.filter(*output);
   return output;
 }
@@ -165,7 +174,7 @@ Preprocessing::distanceFilter(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input)
   float max_d2 = params_.max_distance * params_.max_distance;
 
   for (const auto& pt : *input) {
-    float d2 = pt.x * pt.x + pt.y * pt.y;  // 2D distance (horizontal)
+    float d2 = pt.x * pt.x + pt.y * pt.y;
     if (d2 >= min_d2 && d2 <= max_d2) {
       output->push_back(pt);
     }

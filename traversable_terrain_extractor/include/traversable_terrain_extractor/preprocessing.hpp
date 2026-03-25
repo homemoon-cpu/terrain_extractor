@@ -15,9 +15,10 @@ struct PreprocessingParams {
   float min_distance = 0.5f;
   float max_distance = 50.0f;
 
-  // Z range (passthrough)
-  float min_z = -5.0f;
-  float max_z = 10.0f;
+  // Z range — relative to sensor position (set via sensor_z in process())
+  // PassThrough will use [sensor_z - z_offset_below, sensor_z + z_offset_above]
+  float z_offset_below = 3.0f;   // meters below sensor to keep
+  float z_offset_above = 1.0f;   // meters above sensor to keep
 
   // Statistical outlier removal
   int sor_mean_k = 10;
@@ -38,14 +39,17 @@ public:
   void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
 
   // Full preprocessing pipeline
-  // Returns filtered cloud
+  // sensor_z: current sensor height in map frame (from odometry)
+  // PassThrough Z window = [sensor_z - z_offset_below, sensor_z + z_offset_above]
   pcl::PointCloud<pcl::PointXYZI>::Ptr
-  process(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input) const;
+  process(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input,
+          float sensor_z = 0.0f) const;
 
 private:
   // Individual steps
   pcl::PointCloud<pcl::PointXYZI>::Ptr
-  passthroughFilter(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input) const;
+  passthroughFilter(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input,
+                    float z_min, float z_max) const;
 
   pcl::PointCloud<pcl::PointXYZI>::Ptr
   voxelDownsample(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input) const;

@@ -14,8 +14,11 @@ terrain_extractor:
       voxel_size: 0.1          # Voxel grid leaf size (m)
       min_distance: 0.5        # Min horizontal distance from sensor (m)
       max_distance: 50.0       # Max horizontal distance from sensor (m)
-      min_z: -5.0              # PassThrough Z lower bound (m)
-      max_z: 1.5               # PassThrough Z upper bound (m)
+      # Z filter is relative to sensor height (from odometry):
+      #   abs_z_min = sensor_z - z_offset_below
+      #   abs_z_max = sensor_z + z_offset_above
+      z_offset_below: 3.0      # Keep points this far BELOW sensor (m), covers floors/stairs
+      z_offset_above: 1.0      # Keep points this far ABOVE sensor (m), filters ceiling clutter
       sor_mean_k: 10           # SOR: number of neighbors for mean distance
       sor_std_thresh: 1.0      # SOR: standard deviation multiplier
       enable_sor: true         # Enable statistical outlier removal
