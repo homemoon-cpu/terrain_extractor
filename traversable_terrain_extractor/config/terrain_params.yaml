@@ -89,6 +89,9 @@ terrain_extractor:
       # Minimum observations for final classification
       min_observations: 2
 
+      # Debug: per-frame cell statistics + rejection breakdown
+      debug_mode: true         # set false when not debugging
+
     # ========== Map Accumulator ==========
     map_accumulator:
       voxel_size: 0.15            # Accumulation voxel size (m)

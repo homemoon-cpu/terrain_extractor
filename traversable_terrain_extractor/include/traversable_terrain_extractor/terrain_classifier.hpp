@@ -2,6 +2,7 @@
 
 #include "traversable_terrain_extractor/types.hpp"
 #include "traversable_terrain_extractor/elevation_grid.hpp"
+#include <rclcpp/rclcpp.hpp>
 
 namespace traversable_terrain {
 
@@ -27,6 +28,9 @@ struct TerrainClassifierParams {
 
   // Minimum observations for classification
   int min_observations = 2;
+
+  // Debug: log per-cell rejection reason + per-frame statistics
+  bool debug_mode = false;
 };
 
 class TerrainClassifier {
@@ -34,6 +38,8 @@ public:
   explicit TerrainClassifier(const TerrainClassifierParams& params = TerrainClassifierParams{});
 
   void setParams(const TerrainClassifierParams& params);
+
+  void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
 
   // Classify all cells in the elevation grid
   void classify(ElevationGrid& grid) const;
@@ -46,6 +52,7 @@ public:
 
 private:
   TerrainClassifierParams params_;
+  rclcpp::Logger logger_ = rclcpp::get_logger("terrain_classifier");
 };
 
 }  // namespace traversable_terrain

@@ -24,6 +24,7 @@ TerrainExtractorNode::TerrainExtractorNode(const rclcpp::NodeOptions& options)
   normal_estimator_ = std::make_unique<NormalEstimator>();
   feature_computer_ = std::make_unique<FeatureComputer>();
   terrain_classifier_ = std::make_unique<TerrainClassifier>();
+  terrain_classifier_->setLogger(this->get_logger());
   map_accumulator_ = std::make_unique<MapAccumulator>();
   occupancy_projector_ = std::make_unique<OccupancyGridProjector>();
 
@@ -548,6 +549,7 @@ void TerrainExtractorNode::declareParameters() {
   this->declare_parameter("terrain_classification.stairs_traversable", true);
   this->declare_parameter("terrain_classification.ramps_traversable", true);
   this->declare_parameter("terrain_classification.min_observations", 2);
+  this->declare_parameter("terrain_classification.debug_mode", false);
 
   // Map accumulator
   this->declare_parameter("map_accumulator.voxel_size", 0.15);
@@ -639,6 +641,7 @@ void TerrainExtractorNode::loadParameters() {
     tcp.stairs_traversable = this->get_parameter("terrain_classification.stairs_traversable").as_bool();
     tcp.ramps_traversable = this->get_parameter("terrain_classification.ramps_traversable").as_bool();
     tcp.min_observations = this->get_parameter("terrain_classification.min_observations").as_int();
+    tcp.debug_mode = this->get_parameter("terrain_classification.debug_mode").as_bool();
     terrain_classifier_->setParams(tcp);
   }
 
