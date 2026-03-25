@@ -32,7 +32,7 @@ TerrainExtractorNode::TerrainExtractorNode(const rclcpp::NodeOptions& options)
   // Subscribers
   cloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
     this->get_parameter("input_cloud_topic").as_string(),
-    rclcpp::SensorDataQoS(),
+    rclcpp::QoS(rclcpp::KeepLast(10)).reliable(),
     std::bind(&TerrainExtractorNode::cloudCallback, this, std::placeholders::_1));
 
   odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
