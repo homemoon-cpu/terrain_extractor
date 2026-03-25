@@ -171,41 +171,31 @@ void TerrainExtractorNode::cloudCallback(
     normal_debug_pub_->publish(debug_msg);
   }
 
-  // === 3.5 Split non-ground into potential-traversable vs wall ===
-  // Walls have near-horizontal normals (normal_z ≈ 0).
-  // Stairs/ramps have tilted but still partially upward normals.
-  // Threshold: |normal_z| >= 0.3 (~73° from vertical) → could be stair/ramp
-  //            |normal_z| <  0.3 → wall, directly mark NON_TRAVERSABLE
+  // === 3.5 Split by normal direction: upward-facing vs wall/flipped ===
+  // Only points with normal_z >= threshold enter feature computation.
+  // normal_z < 0 means flipped normal → reject (NOT abs!)
+  // normal_z in [0, 0.3) → wall → reject
+  // normal_z >= 0.3 → ground/stair/ramp candidate
   auto traversable_candidates = std::make_shared<pcl::PointCloud<pcl::PointXYZI>>();
   auto traversable_normals = std::make_shared<pcl::PointCloud<pcl::Normal>>();
   auto wall_cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZI>>();
 
-  constexpr float wall_normal_z_thresh = 0.3f;  // |nz| < this → wall
-
-  // Build index set of ground points for fast lookup
-  std::vector<bool> is_ground(filtered->size(), false);
-  if (seg_result.ground && !seg_result.ground->empty()) {
-    // Map ground points by position (simple approach: use ground indices)
-    // Since ground_segmentation splits the cloud, we track via position hash
-    // But actually ground + non_ground = filtered in order, so we can use size
-    size_t ground_count = seg_result.ground->size();
-    // Rebuild: iterate filtered with normals, classify each point
-    (void)ground_count;  // Will use normals-based approach below
-  }
+  constexpr float wall_normal_z_thresh = 0.3f;
 
   for (size_t i = 0; i < filtered->size(); ++i) {
     const auto& pt = (*filtered)[i];
     if (i >= normals->size()) break;
     const auto& n = (*normals)[i];
 
-    float nz = std::isfinite(n.normal_z) ? std::abs(n.normal_z) : 0.0f;
+    // Use raw normal_z (NOT abs!). Negative means flipped → wall/bad
+    float nz = std::isfinite(n.normal_z) ? n.normal_z : 0.0f;
 
     if (nz >= wall_normal_z_thresh) {
-      // Ground, stair, or ramp candidate — normal has upward component
+      // Normal points upward → ground, stair, or ramp candidate
       traversable_candidates->push_back(pt);
       traversable_normals->push_back(n);
     } else {
-      // Wall — near-vertical surface
+      // nz < 0.3: wall, ceiling, or flipped normal → exclude
       wall_cloud->push_back(pt);
     }
   }

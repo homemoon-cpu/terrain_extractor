@@ -88,7 +88,9 @@ terrain_extractor:
       ramps_traversable: true
 
       # Minimum observations for final classification
-      min_observations: 2
+      # Must match feature_computation.min_points_per_cell, otherwise
+      # cells with features get classified as UNKNOWN
+      min_observations: 1
 
       # Debug: per-frame cell statistics + rejection breakdown
       debug_mode: true         # set false when not debugging
@@ -99,7 +101,7 @@ terrain_extractor:
       sliding_window_radius: 80.0 # Prune radius around robot (m)
       max_points: 5000000         # Hard limit on voxel count
       ema_alpha: 0.3              # EMA smoothing for feature updates
-      min_observations: 2         # Min observations for confirmed class
+      min_observations: 1         # Min observations for confirmed class (match min_points_per_cell)
 
     # ========== Occupancy Grid Projection ==========
     occupancy_grid:
