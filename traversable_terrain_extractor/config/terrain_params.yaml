@@ -18,7 +18,7 @@ terrain_extractor:
       max_z: 1.5              # PassThrough Z upper bound (m)
       sor_mean_k: 10           # SOR: number of neighbors for mean distance
       sor_std_thresh: 1.0      # SOR: standard deviation multiplier
-      enable_sor: false         # Enable statistical outlier removal
+      enable_sor: true         # Enable statistical outlier removal
 
     # ========== Ground Segmentation ==========
     ground_segmentation:
