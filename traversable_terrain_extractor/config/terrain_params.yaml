@@ -13,11 +13,11 @@ terrain_extractor:
     preprocessing:
       voxel_size: 0.1          # Voxel grid leaf size (m)
       min_distance: 0.5        # Min horizontal distance from sensor (m)
-      max_distance: 50.0       # Max horizontal distance from sensor (m)
+      max_distance: 200.0       # Max horizontal distance from sensor (m)
       # Z filter is relative to sensor height (from odometry):
       #   abs_z_min = sensor_z - z_offset_below
       #   abs_z_max = sensor_z + z_offset_above
-      z_offset_below: 3.0      # Keep points this far BELOW sensor (m), covers floors/stairs
+      z_offset_below: 1.0      # Keep points this far BELOW sensor (m), covers floors/stairs
       z_offset_above: 1.0      # Keep points this far ABOVE sensor (m), filters ceiling clutter
       sor_mean_k: 10           # SOR: number of neighbors for mean distance
       sor_std_thresh: 1.0      # SOR: standard deviation multiplier
@@ -68,10 +68,10 @@ terrain_extractor:
     # ========== Terrain Classification ==========
     terrain_classification:
       # Ground thresholds
-      ground_max_slope_deg: 15.0
-      ground_max_roughness: 0.05
-      ground_max_height_var: 0.03
-      ground_max_curvature: 0.1
+      ground_max_slope_deg: 40.0
+      ground_max_roughness: 0.5
+      ground_max_height_var: 0.4
+      ground_max_curvature: 2.0
 
       # Stair slope range
       stair_min_slope_deg: 20.0
