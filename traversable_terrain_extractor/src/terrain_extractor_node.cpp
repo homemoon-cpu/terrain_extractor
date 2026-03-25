@@ -115,24 +115,81 @@ void TerrainExtractorNode::cloudCallback(
     ground_pub_->publish(ground_msg);
   }
 
-  // === 3. Normal Estimation — use sensor position as viewpoint ===
+  // === 3. Normal Estimation — ONLY on ground points ===
+  // This is critical: estimating normals on all points (including walls)
+  // causes wall normals to contaminate ground cells in the elevation grid,
+  // making real ground appear as non-traversable.
   Eigen::Vector3f sensor_pos;
   {
     std::lock_guard<std::mutex> odom_lock(odom_mutex_);
     sensor_pos = robot_position_;
   }
-  auto normals = normal_estimator_->estimate(filtered, sensor_pos);
 
-  // === 4. Feature Computation ===
-  // Create per-frame elevation grid
-  ElevationGrid frame_grid(feature_computer_ ? 0.3f : 0.3f);
-  feature_computer_->compute(frame_grid, filtered, normals);
+  pcl::PointCloud<pcl::Normal>::Ptr ground_normals;
+  if (seg_result.ground && !seg_result.ground->empty()) {
+    ground_normals = normal_estimator_->estimate(seg_result.ground, sensor_pos);
+  } else {
+    ground_normals = std::make_shared<pcl::PointCloud<pcl::Normal>>();
+  }
 
-  // === 5. Terrain Classification ===
+  // === 4. Feature Computation — ONLY on ground points ===
+  ElevationGrid frame_grid(0.5f);  // Use configured resolution
+  if (seg_result.ground && !seg_result.ground->empty()) {
+    feature_computer_->compute(frame_grid, seg_result.ground, ground_normals);
+  }
+
+  // === 5. Terrain Classification (on ground cells) ===
   terrain_classifier_->classify(frame_grid);
 
   // === 6. Build classified cloud ===
-  auto classified_cloud = buildClassifiedCloud(filtered, normals, frame_grid);
+  // Ground points: get classification from elevation grid
+  // Non-ground points: directly mark as NON_TRAVERSABLE
+  auto classified_cloud = std::make_shared<pcl::PointCloud<PointXYZITerrain>>();
+  classified_cloud->reserve(filtered->size());
+
+  // 6a. Ground points → classified by grid
+  if (seg_result.ground && !seg_result.ground->empty()) {
+    for (size_t i = 0; i < seg_result.ground->size(); ++i) {
+      const auto& pt = (*seg_result.ground)[i];
+      auto cell_idx = frame_grid.worldToCell(pt.x, pt.y);
+      const auto& cell = frame_grid.getCell(cell_idx);
+
+      PointXYZITerrain out_pt;
+      out_pt.x = pt.x;
+      out_pt.y = pt.y;
+      out_pt.z = pt.z;
+      out_pt.intensity = pt.intensity;
+      out_pt.slope = cell.mean_slope;
+      out_pt.roughness = cell.roughness;
+      out_pt.curvature = cell.curvature;
+      out_pt.height_variance = cell.height_var;
+      out_pt.terrain_class = static_cast<uint8_t>(cell.classification);
+      out_pt.traversable = cell.traversable ? 1 : 0;
+      classified_cloud->push_back(out_pt);
+    }
+  }
+
+  // 6b. Non-ground points → NON_TRAVERSABLE
+  if (seg_result.non_ground && !seg_result.non_ground->empty()) {
+    for (const auto& pt : *seg_result.non_ground) {
+      PointXYZITerrain out_pt;
+      out_pt.x = pt.x;
+      out_pt.y = pt.y;
+      out_pt.z = pt.z;
+      out_pt.intensity = pt.intensity;
+      out_pt.slope = 90.0f;
+      out_pt.roughness = 0.0f;
+      out_pt.curvature = 0.0f;
+      out_pt.height_variance = 0.0f;
+      out_pt.terrain_class = static_cast<uint8_t>(TerrainClass::NON_TRAVERSABLE);
+      out_pt.traversable = 0;
+      classified_cloud->push_back(out_pt);
+    }
+  }
+
+  classified_cloud->width = classified_cloud->size();
+  classified_cloud->height = 1;
+  classified_cloud->is_dense = true;
 
   // === 7. Map Accumulation (thread-safe) ===
   {
