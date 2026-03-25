@@ -278,27 +278,60 @@ void TerrainExtractorNode::cloudCallback(
     elevation_grid_ = frame_grid;
   }
 
-  // === 8. Publish results ===
+  // === 8. Publish results (as XYZRGB for correct RViz coloring) ===
   auto now = this->now();
 
-  // Classified cloud
+  // Helper: terrain class → RGB color
+  auto terrainToRGB = [](uint8_t tc) -> std::array<uint8_t, 3> {
+    switch (static_cast<TerrainClass>(tc)) {
+      case TerrainClass::GROUND:          return {0, 200, 0};      // Green
+      case TerrainClass::STAIRS:          return {0, 120, 255};    // Blue
+      case TerrainClass::RAMP:            return {255, 200, 0};    // Yellow
+      case TerrainClass::NON_TRAVERSABLE: return {255, 0, 0};      // Red
+      case TerrainClass::UNKNOWN:
+      default:                            return {128, 128, 128};  // Gray
+    }
+  };
+
+  // Helper: convert PointXYZITerrain cloud to XYZRGB colored by terrain class
+  auto toColoredCloud = [&terrainToRGB](
+      const pcl::PointCloud<PointXYZITerrain>::Ptr& src)
+      -> pcl::PointCloud<pcl::PointXYZRGB>::Ptr {
+    auto rgb = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
+    rgb->reserve(src->size());
+    for (const auto& pt : *src) {
+      pcl::PointXYZRGB cp;
+      cp.x = pt.x; cp.y = pt.y; cp.z = pt.z;
+      auto c = terrainToRGB(pt.terrain_class);
+      cp.r = c[0]; cp.g = c[1]; cp.b = c[2];
+      rgb->push_back(cp);
+    }
+    rgb->width = rgb->size();
+    rgb->height = 1;
+    rgb->is_dense = true;
+    return rgb;
+  };
+
+  // Classified cloud (all points, colored by terrain class)
   if (classified_pub_->get_subscription_count() > 0) {
+    auto colored = toColoredCloud(classified_cloud);
     sensor_msgs::msg::PointCloud2 classified_msg;
-    pcl::toROSMsg(*classified_cloud, classified_msg);
+    pcl::toROSMsg(*colored, classified_msg);
     classified_msg.header.stamp = now;
     classified_msg.header.frame_id = map_frame_id_;
     classified_pub_->publish(classified_msg);
   }
 
-  // Traversable cloud (from accumulated map for completeness)
+  // Traversable cloud (accumulated, only traversable points)
   if (traversable_pub_->get_subscription_count() > 0) {
     pcl::PointCloud<PointXYZITerrain>::Ptr trav_cloud;
     {
       std::shared_lock<std::shared_mutex> lock(map_mutex_);
       trav_cloud = map_accumulator_->getTraversableCloud();
     }
+    auto colored = toColoredCloud(trav_cloud);
     sensor_msgs::msg::PointCloud2 trav_msg;
-    pcl::toROSMsg(*trav_cloud, trav_msg);
+    pcl::toROSMsg(*colored, trav_msg);
     trav_msg.header.stamp = now;
     trav_msg.header.frame_id = map_frame_id_;
     traversable_pub_->publish(trav_msg);
