@@ -33,15 +33,15 @@ terrain_extractor:
       ransac_max_iterations: 200
       ransac_normal_z_min: 0.85   # cos(~32°) — min z-component of plane normal
 
-      # Patchwork parameters
-      pw_num_rings: 4             # Concentric ring divisions
-      pw_num_sectors: 16          # Sector divisions per ring
-      pw_max_range: 50.0          # Max range (m)
+      # Patchwork parameters (tuned for sparse Livox Mid-360 single frames)
+      pw_num_rings: 2             # 4→2: fewer rings = more pts per patch
+      pw_num_sectors: 8           # 16→8: fewer sectors = more pts per patch
+      pw_max_range: 200.0         # Match max_distance
       pw_min_range: 0.5           # Min range (m)
-      pw_uprightness_thresh: 0.7  # cos(~45°) — normal z threshold for ground
+      pw_uprightness_thresh: 0.5  # 0.7→0.5: more lenient for sparse data
       pw_elevation_thresh: 0.5    # Max distance from fitted plane (m)
-      pw_flatness_thresh: 0.02    # Eigenvalue ratio for planarity
-      pw_min_points_per_patch: 5  # Min points to fit a plane
+      pw_flatness_thresh: 0.1     # 0.02→0.1: relaxed for sparse/noisy patches
+      pw_min_points_per_patch: 3  # 5→3: allow sparser patches
 
     # ========== Normal Estimation ==========
     normal_estimation:
