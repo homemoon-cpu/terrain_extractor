@@ -115,76 +115,108 @@ void TerrainExtractorNode::cloudCallback(
     ground_pub_->publish(ground_msg);
   }
 
-  // === 3. Normal Estimation — ONLY on ground points ===
-  // This is critical: estimating normals on all points (including walls)
-  // causes wall normals to contaminate ground cells in the elevation grid,
-  // making real ground appear as non-traversable.
+  // === 3. Normal Estimation on ALL filtered points ===
   Eigen::Vector3f sensor_pos;
   {
     std::lock_guard<std::mutex> odom_lock(odom_mutex_);
     sensor_pos = robot_position_;
   }
+  auto normals = normal_estimator_->estimate(filtered, sensor_pos);
 
-  pcl::PointCloud<pcl::Normal>::Ptr ground_normals;
+  // === 3.5 Split non-ground into potential-traversable vs wall ===
+  // Walls have near-horizontal normals (normal_z ≈ 0).
+  // Stairs/ramps have tilted but still partially upward normals.
+  // Threshold: |normal_z| >= 0.3 (~73° from vertical) → could be stair/ramp
+  //            |normal_z| <  0.3 → wall, directly mark NON_TRAVERSABLE
+  auto traversable_candidates = std::make_shared<pcl::PointCloud<pcl::PointXYZI>>();
+  auto traversable_normals = std::make_shared<pcl::PointCloud<pcl::Normal>>();
+  auto wall_cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZI>>();
+
+  constexpr float wall_normal_z_thresh = 0.3f;  // |nz| < this → wall
+
+  // Build index set of ground points for fast lookup
+  std::vector<bool> is_ground(filtered->size(), false);
   if (seg_result.ground && !seg_result.ground->empty()) {
-    ground_normals = normal_estimator_->estimate(seg_result.ground, sensor_pos);
-  } else {
-    ground_normals = std::make_shared<pcl::PointCloud<pcl::Normal>>();
+    // Map ground points by position (simple approach: use ground indices)
+    // Since ground_segmentation splits the cloud, we track via position hash
+    // But actually ground + non_ground = filtered in order, so we can use size
+    size_t ground_count = seg_result.ground->size();
+    // Rebuild: iterate filtered with normals, classify each point
+    (void)ground_count;  // Will use normals-based approach below
   }
 
-  // === 4. Feature Computation — ONLY on ground points ===
-  ElevationGrid frame_grid(0.5f);  // Use configured resolution
-  if (seg_result.ground && !seg_result.ground->empty()) {
-    feature_computer_->compute(frame_grid, seg_result.ground, ground_normals);
+  for (size_t i = 0; i < filtered->size(); ++i) {
+    const auto& pt = (*filtered)[i];
+    if (i >= normals->size()) break;
+    const auto& n = (*normals)[i];
+
+    float nz = std::isfinite(n.normal_z) ? std::abs(n.normal_z) : 0.0f;
+
+    if (nz >= wall_normal_z_thresh) {
+      // Ground, stair, or ramp candidate — normal has upward component
+      traversable_candidates->push_back(pt);
+      traversable_normals->push_back(n);
+    } else {
+      // Wall — near-vertical surface
+      wall_cloud->push_back(pt);
+    }
   }
 
-  // === 5. Terrain Classification (on ground cells) ===
+  traversable_candidates->width = traversable_candidates->size();
+  traversable_candidates->height = 1;
+  traversable_candidates->is_dense = true;
+
+  RCLCPP_DEBUG(this->get_logger(),
+    "Normal split: traversable_candidates=%zu  walls=%zu  (thresh nz>=%.2f)",
+    traversable_candidates->size(), wall_cloud->size(), wall_normal_z_thresh);
+
+  // === 4. Feature Computation — on traversable candidates only ===
+  ElevationGrid frame_grid(0.5f);
+  if (!traversable_candidates->empty()) {
+    feature_computer_->compute(frame_grid, traversable_candidates, traversable_normals);
+  }
+
+  // === 5. Terrain Classification ===
   terrain_classifier_->classify(frame_grid);
 
   // === 6. Build classified cloud ===
-  // Ground points: get classification from elevation grid
-  // Non-ground points: directly mark as NON_TRAVERSABLE
   auto classified_cloud = std::make_shared<pcl::PointCloud<PointXYZITerrain>>();
   classified_cloud->reserve(filtered->size());
 
-  // 6a. Ground points → classified by grid
-  if (seg_result.ground && !seg_result.ground->empty()) {
-    for (size_t i = 0; i < seg_result.ground->size(); ++i) {
-      const auto& pt = (*seg_result.ground)[i];
-      auto cell_idx = frame_grid.worldToCell(pt.x, pt.y);
-      const auto& cell = frame_grid.getCell(cell_idx);
+  // 6a. Traversable candidates → classified by elevation grid
+  for (size_t i = 0; i < traversable_candidates->size(); ++i) {
+    const auto& pt = (*traversable_candidates)[i];
+    auto cell_idx = frame_grid.worldToCell(pt.x, pt.y);
+    const auto& cell = frame_grid.getCell(cell_idx);
 
-      PointXYZITerrain out_pt;
-      out_pt.x = pt.x;
-      out_pt.y = pt.y;
-      out_pt.z = pt.z;
-      out_pt.intensity = pt.intensity;
-      out_pt.slope = cell.mean_slope;
-      out_pt.roughness = cell.roughness;
-      out_pt.curvature = cell.curvature;
-      out_pt.height_variance = cell.height_var;
-      out_pt.terrain_class = static_cast<uint8_t>(cell.classification);
-      out_pt.traversable = cell.traversable ? 1 : 0;
-      classified_cloud->push_back(out_pt);
-    }
+    PointXYZITerrain out_pt;
+    out_pt.x = pt.x;
+    out_pt.y = pt.y;
+    out_pt.z = pt.z;
+    out_pt.intensity = pt.intensity;
+    out_pt.slope = cell.mean_slope;
+    out_pt.roughness = cell.roughness;
+    out_pt.curvature = cell.curvature;
+    out_pt.height_variance = cell.height_var;
+    out_pt.terrain_class = static_cast<uint8_t>(cell.classification);
+    out_pt.traversable = cell.traversable ? 1 : 0;
+    classified_cloud->push_back(out_pt);
   }
 
-  // 6b. Non-ground points → NON_TRAVERSABLE
-  if (seg_result.non_ground && !seg_result.non_ground->empty()) {
-    for (const auto& pt : *seg_result.non_ground) {
-      PointXYZITerrain out_pt;
-      out_pt.x = pt.x;
-      out_pt.y = pt.y;
-      out_pt.z = pt.z;
-      out_pt.intensity = pt.intensity;
-      out_pt.slope = 90.0f;
-      out_pt.roughness = 0.0f;
-      out_pt.curvature = 0.0f;
-      out_pt.height_variance = 0.0f;
-      out_pt.terrain_class = static_cast<uint8_t>(TerrainClass::NON_TRAVERSABLE);
-      out_pt.traversable = 0;
-      classified_cloud->push_back(out_pt);
-    }
+  // 6b. Wall points → NON_TRAVERSABLE (vertical surfaces, never traversable)
+  for (const auto& pt : *wall_cloud) {
+    PointXYZITerrain out_pt;
+    out_pt.x = pt.x;
+    out_pt.y = pt.y;
+    out_pt.z = pt.z;
+    out_pt.intensity = pt.intensity;
+    out_pt.slope = 90.0f;
+    out_pt.roughness = 0.0f;
+    out_pt.curvature = 0.0f;
+    out_pt.height_variance = 0.0f;
+    out_pt.terrain_class = static_cast<uint8_t>(TerrainClass::NON_TRAVERSABLE);
+    out_pt.traversable = 0;
+    classified_cloud->push_back(out_pt);
   }
 
   classified_cloud->width = classified_cloud->size();
