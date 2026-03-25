@@ -15,10 +15,11 @@ terrain_extractor:
       min_distance: 0.5        # Min horizontal distance from sensor (m)
       max_distance: 50.0       # Max horizontal distance from sensor (m)
       min_z: -5.0              # PassThrough Z lower bound (m)
-      max_z: 1.5              # PassThrough Z upper bound (m)
+      max_z: 1.5               # PassThrough Z upper bound (m)
       sor_mean_k: 10           # SOR: number of neighbors for mean distance
       sor_std_thresh: 1.0      # SOR: standard deviation multiplier
       enable_sor: true         # Enable statistical outlier removal
+      debug_mode: true         # Print per-step point counts (set false when not debugging)
 
     # ========== Ground Segmentation ==========
     ground_segmentation:
