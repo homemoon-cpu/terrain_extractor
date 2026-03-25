@@ -88,6 +88,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr traversable_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr classified_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr ground_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr normal_debug_pub_;  // normal_z colored XYZRGB
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr grid_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
 

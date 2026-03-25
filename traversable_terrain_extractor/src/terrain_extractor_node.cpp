@@ -50,6 +50,8 @@ TerrainExtractorNode::TerrainExtractorNode(const rclcpp::NodeOptions& options)
     "~/classified_cloud", 10);
   ground_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
     "~/ground_cloud", 10);
+  normal_debug_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+    "~/normal_debug_cloud", 10);
   grid_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(
     "~/occupancy_grid", 10);
   marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
@@ -122,6 +124,52 @@ void TerrainExtractorNode::cloudCallback(
     sensor_pos = robot_position_;
   }
   auto normals = normal_estimator_->estimate(filtered, sensor_pos);
+
+  // === 3.1 Publish normal_z debug cloud (XYZRGB, colored by normal_z) ===
+  // Color mapping:
+  //   nz < 0    → Red    (flipped normals, bad)
+  //   0 ~ 0.3   → Orange (wall / near-vertical)
+  //   0.3 ~ 0.5 → Yellow (steep slope / stair candidate)
+  //   0.5 ~ 0.8 → Cyan   (moderate slope / ramp)
+  //   0.8 ~ 1.0 → Green  (flat ground)
+  // RViz: add PointCloud2, topic ~/normal_debug_cloud, Color Transformer = RGB
+  if (normal_debug_pub_->get_subscription_count() > 0 && normals && normals->size() == filtered->size()) {
+    auto debug_cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
+    debug_cloud->reserve(filtered->size());
+
+    for (size_t i = 0; i < filtered->size(); ++i) {
+      const auto& pt = (*filtered)[i];
+      const auto& n = (*normals)[i];
+      float nz = std::isfinite(n.normal_z) ? n.normal_z : 0.0f;
+
+      pcl::PointXYZRGB cp;
+      cp.x = pt.x; cp.y = pt.y; cp.z = pt.z;
+
+      if (nz < 0.0f) {
+        cp.r = 255; cp.g = 0;   cp.b = 0;     // Red: flipped
+      } else if (nz < 0.3f) {
+        cp.r = 255; cp.g = 140; cp.b = 0;     // Orange: wall
+      } else if (nz < 0.5f) {
+        cp.r = 255; cp.g = 255; cp.b = 0;     // Yellow: steep
+      } else if (nz < 0.8f) {
+        cp.r = 0;   cp.g = 220; cp.b = 220;   // Cyan: ramp/stair
+      } else {
+        cp.r = 0;   cp.g = 255; cp.b = 0;     // Green: ground
+      }
+
+      debug_cloud->push_back(cp);
+    }
+
+    debug_cloud->width = debug_cloud->size();
+    debug_cloud->height = 1;
+    debug_cloud->is_dense = true;
+
+    sensor_msgs::msg::PointCloud2 debug_msg;
+    pcl::toROSMsg(*debug_cloud, debug_msg);
+    debug_msg.header.stamp = this->now();
+    debug_msg.header.frame_id = map_frame_id_;
+    normal_debug_pub_->publish(debug_msg);
+  }
 
   // === 3.5 Split non-ground into potential-traversable vs wall ===
   // Walls have near-horizontal normals (normal_z ≈ 0).
