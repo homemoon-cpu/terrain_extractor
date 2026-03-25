@@ -109,11 +109,18 @@ void TerrainExtractorNode::cloudCallback(
   // === 2. Ground Segmentation ===
   auto seg_result = ground_segmentation_->segment(filtered);
 
-  // Publish ground cloud for debugging
-  if (ground_pub_->get_subscription_count() > 0 && seg_result.ground && !seg_result.ground->empty()) {
+  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
+    "[GroundSeg] ground=%zu  non_ground=%zu  (method: %s)",
+    seg_result.ground ? seg_result.ground->size() : 0,
+    seg_result.non_ground ? seg_result.non_ground->size() : 0,
+    "patchwork");
+
+  // Publish ground cloud (always publish, don't check subscription count)
+  if (seg_result.ground && !seg_result.ground->empty()) {
     sensor_msgs::msg::PointCloud2 ground_msg;
     pcl::toROSMsg(*seg_result.ground, ground_msg);
-    ground_msg.header = msg->header;
+    ground_msg.header.stamp = this->now();
+    ground_msg.header.frame_id = map_frame_id_;
     ground_pub_->publish(ground_msg);
   }
 
