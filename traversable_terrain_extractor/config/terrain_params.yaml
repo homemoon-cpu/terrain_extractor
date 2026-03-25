@@ -1,0 +1,100 @@
+# Traversable Terrain Extractor Parameters
+# All parameters for the terrain extraction pipeline
+
+terrain_extractor:
+  ros__parameters:
+    # ========== General ==========
+    map_frame_id: "map"
+    default_save_directory: "/tmp/traversable_maps"
+    input_cloud_topic: "/lio_sam/mapping/cloud_registered"
+    input_odom_topic: "/lio_sam/mapping/odometry"
+
+    # ========== Preprocessing ==========
+    preprocessing:
+      voxel_size: 0.1          # Voxel grid leaf size (m)
+      min_distance: 0.5        # Min horizontal distance from sensor (m)
+      max_distance: 50.0       # Max horizontal distance from sensor (m)
+      min_z: -5.0              # PassThrough Z lower bound (m)
+      max_z: 10.0              # PassThrough Z upper bound (m)
+      sor_mean_k: 10           # SOR: number of neighbors for mean distance
+      sor_std_thresh: 1.0      # SOR: standard deviation multiplier
+      enable_sor: true         # Enable statistical outlier removal
+
+    # ========== Ground Segmentation ==========
+    ground_segmentation:
+      method: "patchwork"      # "patchwork" or "ransac"
+
+      # RANSAC parameters
+      ransac_distance_threshold: 0.15
+      ransac_max_iterations: 200
+      ransac_normal_z_min: 0.85   # cos(~32°) — min z-component of plane normal
+
+      # Patchwork parameters
+      pw_num_rings: 4             # Concentric ring divisions
+      pw_num_sectors: 16          # Sector divisions per ring
+      pw_max_range: 50.0          # Max range (m)
+      pw_min_range: 0.5           # Min range (m)
+      pw_uprightness_thresh: 0.7  # cos(~45°) — normal z threshold for ground
+      pw_elevation_thresh: 0.5    # Max distance from fitted plane (m)
+      pw_flatness_thresh: 0.02    # Eigenvalue ratio for planarity
+      pw_min_points_per_patch: 5  # Min points to fit a plane
+
+    # ========== Normal Estimation ==========
+    normal_estimation:
+      search_radius: 0.3          # KNN search radius (m)
+      omp_num_threads: 4          # OpenMP threads
+
+    # ========== Feature Computation ==========
+    feature_computation:
+      grid_resolution: 0.3        # Elevation grid cell size (m)
+      min_points_per_cell: 2      # Min points for valid cell
+
+      # Stair detection
+      stair_min_step_height: 0.10 # Min step height (m)
+      stair_max_step_height: 0.25 # Max step height (m)
+      stair_min_steps: 2          # Min steps to classify as stairs
+      stair_search_length: 3.0    # Search distance along gradient (m)
+
+      # Ramp detection
+      ramp_min_length: 1.5        # Min ramp length (m)
+      ramp_min_slope_deg: 5.0     # Min slope for ramp (°)
+      ramp_max_slope_deg: 25.0    # Max slope for ramp (°)
+      ramp_slope_consistency: 5.0 # Max slope variation within ramp (°)
+
+    # ========== Terrain Classification ==========
+    terrain_classification:
+      # Ground thresholds
+      ground_max_slope_deg: 15.0
+      ground_max_roughness: 0.05
+      ground_max_height_var: 0.03
+      ground_max_curvature: 0.1
+
+      # Stair slope range
+      stair_min_slope_deg: 20.0
+      stair_max_slope_deg: 50.0
+
+      # Ramp slope range
+      ramp_min_slope_deg: 5.0
+      ramp_max_slope_deg: 25.0
+
+      # Traversability
+      max_traversable_slope_deg: 30.0
+      stairs_traversable: true
+      ramps_traversable: true
+
+      # Minimum observations for final classification
+      min_observations: 2
+
+    # ========== Map Accumulator ==========
+    map_accumulator:
+      voxel_size: 0.15            # Accumulation voxel size (m)
+      sliding_window_radius: 80.0 # Prune radius around robot (m)
+      max_points: 5000000         # Hard limit on voxel count
+      ema_alpha: 0.3              # EMA smoothing for feature updates
+      min_observations: 2         # Min observations for confirmed class
+
+    # ========== Occupancy Grid Projection ==========
+    occupancy_grid:
+      resolution: 0.2             # 2D grid resolution (m)
+      range: 100.0                # Half-width of grid (m)
+      robot_centric: false        # Center grid on robot position

@@ -1,0 +1,16 @@
+# Request
+string output_directory       # Empty = use default directory
+bool save_pcd                 # Save 3D annotated point cloud
+bool save_occupancy_grid      # Save 2D grid (PGM+YAML, nav2 compatible)
+bool save_csv                 # Save feature CSV
+bool traversable_only         # Only save traversable points
+---
+# Response
+bool success
+string message
+string pcd_path
+string grid_pgm_path
+string grid_yaml_path
+string csv_path
+uint32 total_points
+uint32 traversable_points
