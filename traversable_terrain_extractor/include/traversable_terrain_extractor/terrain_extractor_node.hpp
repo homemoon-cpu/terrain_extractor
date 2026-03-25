@@ -78,6 +78,7 @@ private:
 
   // Robot state
   Eigen::Vector3f robot_position_ = Eigen::Vector3f::Zero();
+  bool odom_received_ = false;  // Guard: don't process until first odom arrives
   std::mutex odom_mutex_;
 
   // ROS interfaces

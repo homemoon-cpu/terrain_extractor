@@ -79,6 +79,17 @@ void TerrainExtractorNode::cloudCallback(
     return;
   }
 
+  // Guard: wait for first odometry before processing
+  // (sensor position needed for correct normal viewpoint and Z passthrough)
+  {
+    std::lock_guard<std::mutex> odom_lock(odom_mutex_);
+    if (!odom_received_) {
+      RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
+                           "Waiting for first odometry message...");
+      return;
+    }
+  }
+
   // === 1. Preprocessing ===
   // Pass current sensor Z so PassThrough uses relative offsets
   float sensor_z = 0.0f;
@@ -200,6 +211,7 @@ void TerrainExtractorNode::odomCallback(
   robot_position_.x() = static_cast<float>(msg->pose.pose.position.x);
   robot_position_.y() = static_cast<float>(msg->pose.pose.position.y);
   robot_position_.z() = static_cast<float>(msg->pose.pose.position.z);
+  odom_received_ = true;
 }
 
 pcl::PointCloud<PointXYZITerrain>::Ptr

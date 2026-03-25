@@ -45,13 +45,13 @@ terrain_extractor:
 
     # ========== Normal Estimation ==========
     normal_estimation:
-      search_radius: 0.3          # KNN search radius (m)
+      search_radius: 0.5          # 0.3→0.5: larger radius for sparse Livox single-frame clouds
       omp_num_threads: 4          # OpenMP threads
 
     # ========== Feature Computation ==========
     feature_computation:
-      grid_resolution: 0.3        # Elevation grid cell size (m)
-      min_points_per_cell: 2      # Min points for valid cell
+      grid_resolution: 0.5        # 0.3→0.5: larger cells, more pts per cell for sparse Livox frames
+      min_points_per_cell: 1      # 2→1: allow sparse single-frame cells
       debug_mode: true            # Print normal_z distribution + feature stats
 
       # Stair detection
