@@ -19,6 +19,7 @@ TerrainExtractorNode::TerrainExtractorNode(const rclcpp::NodeOptions& options)
 
   // Initialize pipeline components
   preprocessing_ = std::make_unique<Preprocessing>();
+  preprocessing_->setLogger(this->get_logger());
   ground_segmentation_ = std::make_unique<GroundSegmentation>();
   normal_estimator_ = std::make_unique<NormalEstimator>();
   feature_computer_ = std::make_unique<FeatureComputer>();
@@ -496,6 +497,7 @@ void TerrainExtractorNode::declareParameters() {
   this->declare_parameter("preprocessing.sor_mean_k", 10);
   this->declare_parameter("preprocessing.sor_std_thresh", 1.0);
   this->declare_parameter("preprocessing.enable_sor", true);
+  this->declare_parameter("preprocessing.debug_mode", false);
 
   // Ground segmentation
   this->declare_parameter("ground_segmentation.method", "patchwork");
@@ -569,6 +571,7 @@ void TerrainExtractorNode::loadParameters() {
     pp.sor_mean_k = this->get_parameter("preprocessing.sor_mean_k").as_int();
     pp.sor_std_thresh = static_cast<float>(this->get_parameter("preprocessing.sor_std_thresh").as_double());
     pp.enable_sor = this->get_parameter("preprocessing.enable_sor").as_bool();
+    pp.debug_mode = this->get_parameter("preprocessing.debug_mode").as_bool();
     preprocessing_->setParams(pp);
   }
 

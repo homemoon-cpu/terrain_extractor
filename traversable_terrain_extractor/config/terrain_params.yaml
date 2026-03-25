@@ -19,6 +19,7 @@ terrain_extractor:
       sor_mean_k: 10           # SOR: number of neighbors for mean distance
       sor_std_thresh: 1.0      # SOR: standard deviation multiplier
       enable_sor: true         # Enable statistical outlier removal
+      debug_mode: false        # Print per-step point counts and cloud stats (set true to diagnose empty cloud)
 
     # ========== Ground Segmentation ==========
     ground_segmentation:
