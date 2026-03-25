@@ -23,6 +23,7 @@ TerrainExtractorNode::TerrainExtractorNode(const rclcpp::NodeOptions& options)
   ground_segmentation_ = std::make_unique<GroundSegmentation>();
   normal_estimator_ = std::make_unique<NormalEstimator>();
   feature_computer_ = std::make_unique<FeatureComputer>();
+  feature_computer_->setLogger(this->get_logger());
   terrain_classifier_ = std::make_unique<TerrainClassifier>();
   terrain_classifier_->setLogger(this->get_logger());
   map_accumulator_ = std::make_unique<MapAccumulator>();
@@ -103,8 +104,13 @@ void TerrainExtractorNode::cloudCallback(
     ground_pub_->publish(ground_msg);
   }
 
-  // === 3. Normal Estimation (on all filtered points) ===
-  auto normals = normal_estimator_->estimate(filtered);
+  // === 3. Normal Estimation — use sensor position as viewpoint ===
+  Eigen::Vector3f sensor_pos;
+  {
+    std::lock_guard<std::mutex> odom_lock(odom_mutex_);
+    sensor_pos = robot_position_;
+  }
+  auto normals = normal_estimator_->estimate(filtered, sensor_pos);
 
   // === 4. Feature Computation ===
   // Create per-frame elevation grid
@@ -535,6 +541,7 @@ void TerrainExtractorNode::declareParameters() {
   this->declare_parameter("feature_computation.ramp_max_slope_deg", 25.0);
   this->declare_parameter("feature_computation.ramp_slope_consistency", 5.0);
   this->declare_parameter("feature_computation.min_points_per_cell", 2);
+  this->declare_parameter("feature_computation.debug_mode", false);
 
   // Terrain classification
   this->declare_parameter("terrain_classification.ground_max_slope_deg", 15.0);
@@ -623,6 +630,7 @@ void TerrainExtractorNode::loadParameters() {
     fcp.ramp_max_slope_deg = static_cast<float>(this->get_parameter("feature_computation.ramp_max_slope_deg").as_double());
     fcp.ramp_slope_consistency = static_cast<float>(this->get_parameter("feature_computation.ramp_slope_consistency").as_double());
     fcp.min_points_per_cell = this->get_parameter("feature_computation.min_points_per_cell").as_int();
+    fcp.debug_mode = this->get_parameter("feature_computation.debug_mode").as_bool();
     feature_computer_->setParams(fcp);
   }
 

@@ -52,6 +52,7 @@ terrain_extractor:
     feature_computation:
       grid_resolution: 0.3        # Elevation grid cell size (m)
       min_points_per_cell: 2      # Min points for valid cell
+      debug_mode: true            # Print normal_z distribution + feature stats
 
       # Stair detection
       stair_min_step_height: 0.10 # Min step height (m)

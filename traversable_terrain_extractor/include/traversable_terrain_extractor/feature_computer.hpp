@@ -4,6 +4,7 @@
 #include "traversable_terrain_extractor/elevation_grid.hpp"
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <rclcpp/rclcpp.hpp>
 
 namespace traversable_terrain {
 
@@ -24,6 +25,9 @@ struct FeatureComputerParams {
 
   // Point density
   int min_points_per_cell = 2;
+
+  // Debug: print per-frame feature distribution (normal_z, slope, roughness, etc.)
+  bool debug_mode = false;
 };
 
 class FeatureComputer {
@@ -32,6 +36,8 @@ public:
 
   void setParams(const FeatureComputerParams& params);
 
+  void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
+
   // Compute all features on the elevation grid
   // Modifies grid cells in-place
   void compute(ElevationGrid& grid,
@@ -39,16 +45,15 @@ public:
                const pcl::PointCloud<pcl::Normal>::Ptr& normals) const;
 
 private:
-  // Per-cell feature computation
   void computeCellFeatures(ElevationGrid& grid) const;
-
-  // Stair detection across the grid
   void detectStairs(ElevationGrid& grid) const;
-
-  // Ramp detection (region growing on consistent slope)
   void detectRamps(ElevationGrid& grid) const;
 
+  // Debug: log feature distribution histogram across all valid cells
+  void logFeatureStats(const ElevationGrid& grid) const;
+
   FeatureComputerParams params_;
+  rclcpp::Logger logger_ = rclcpp::get_logger("feature_computer");
 };
 
 }  // namespace traversable_terrain
